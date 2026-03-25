@@ -24,7 +24,7 @@ import {
   MessageSquare, GitBranch, TrendingUp, Calendar,
   Building2, ChevronRight, Loader2, Map, AlertTriangle,
   Lightbulb, Target, Handshake, Shield, UserCog, Pencil, X,
-  Network
+  Network, Compass
 } from "lucide-react"
 import { BranchMap } from "@/components/simulation/branch-map"
 import { YearSummaryDisplay } from "@/components/simulation/year-summary"
@@ -481,6 +481,12 @@ export default function SimulationDetailPage() {
         
         {canRunYear && (
           <div className="flex items-center gap-2">
+            <Link href={`/simulations/${id}/strategic`}>
+              <Button variant="outline" className="bg-transparent">
+                <Compass className="w-4 h-4 mr-2" />
+                Strategic Tools
+              </Button>
+            </Link>
             <Dialog open={manualControlOpen} onOpenChange={setManualControlOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="bg-transparent">
@@ -646,6 +652,14 @@ export default function SimulationDetailPage() {
 
         {/* Export Button */}
         <ExportDialog simulationId={simulation.id} simulationName={simulation.name} />
+
+        {/* Strategic Tools Button - Always available */}
+        <Link href={`/simulations/${id}/strategic`}>
+          <Button variant="outline" className="bg-transparent">
+            <Compass className="w-4 h-4 mr-2" />
+            Strategic Planning
+          </Button>
+        </Link>
 
         {/* Branch Button - Only show if at least one year completed */}
         {simulation.current_year > 0 && (
