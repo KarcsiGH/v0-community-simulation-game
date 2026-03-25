@@ -21,9 +21,13 @@ import {
   ExternalLink,
   AlertCircle,
   Sparkles,
+  Network,
+  Radar,
 } from "lucide-react"
 import type { Community, Candidate, Entity } from "@/lib/entity-types"
 import { BatchEntityPopulator } from "@/components/batch-entity-populator"
+import { NetworkAnalysisPanel } from "@/components/network/network-analysis-panel"
+import { DeepDiscoveryPanel } from "@/components/community/deep-discovery-panel"
 
 const stakeholderRoleConfig: Record<string, { label: string; color: string }> = {
   ally: { label: "Ally", color: "bg-green-100 text-green-800" },
@@ -284,6 +288,14 @@ export default function CommunityDetailPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="network" className="gap-2">
+            <Network className="w-4 h-4" />
+            Network Analysis
+          </TabsTrigger>
+          <TabsTrigger value="deep-discovery" className="gap-2">
+            <Radar className="w-4 h-4" />
+            Deep Discovery
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="candidates" className="space-y-6">
@@ -504,6 +516,20 @@ export default function CommunityDetailPage() {
               })}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="network" className="space-y-6">
+          <NetworkAnalysisPanel communityId={id} />
+        </TabsContent>
+
+        <TabsContent value="deep-discovery" className="space-y-6">
+          <DeepDiscoveryPanel 
+            communityId={id} 
+            onDiscoveryComplete={() => {
+              // Refresh candidates after discovery
+              refreshCommunityData()
+            }}
+          />
         </TabsContent>
       </Tabs>
     </div>
