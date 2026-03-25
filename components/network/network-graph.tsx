@@ -54,6 +54,7 @@ interface NetworkGraphProps {
   onNodeHover?: (node: NetworkNode | null) => void
   highlightedNode?: string | null
   colorBy?: "type" | "role" | "cluster"
+  onColorByChange?: (value: "type" | "role" | "cluster") => void
 }
 
 const typeColors: Record<string, string> = {
@@ -107,6 +108,7 @@ export function NetworkGraph({
   onNodeHover,
   highlightedNode,
   colorBy = "role",
+  onColorByChange,
 }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -306,13 +308,13 @@ export function NetworkGraph({
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Color by:</span>
-            <Select value={colorBy} disabled>
+            <Select value={colorBy} onValueChange={(v) => onColorByChange?.(v as "type" | "role" | "cluster")}>
               <SelectTrigger className="w-[120px] h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="role">Role</SelectItem>
-                <SelectItem value="type">Type</SelectItem>
+                <SelectItem value="type">Entity Type</SelectItem>
                 <SelectItem value="cluster">Cluster</SelectItem>
               </SelectContent>
             </Select>
@@ -481,12 +483,26 @@ export function NetworkGraph({
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Roles:</span>
-          {Object.entries(roleColors).slice(0, 6).map(([role, color]) => (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-muted-foreground">
+            {colorBy === "role" ? "Roles:" : colorBy === "type" ? "Types:" : "Clusters:"}
+          </span>
+          {colorBy === "role" && Object.entries(roleColors).slice(0, 6).map(([role, color]) => (
             <div key={role} className="flex items-center gap-1">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-              <span className="text-xs capitalize">{role}</span>
+              <span className="text-xs capitalize">{role.replace("-", " ")}</span>
+            </div>
+          ))}
+          {colorBy === "type" && Object.entries(typeColors).slice(0, 6).map(([type, color]) => (
+            <div key={type} className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-xs capitalize">{type.replace("-", " ")}</span>
+            </div>
+          ))}
+          {colorBy === "cluster" && clusterColors.slice(0, 5).map((color, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-xs">Cluster {i + 1}</span>
             </div>
           ))}
         </div>

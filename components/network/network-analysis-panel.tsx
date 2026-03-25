@@ -219,6 +219,7 @@ export function NetworkAnalysisPanel({ communityId }: NetworkAnalysisPanelProps)
                 links={links}
                 onNodeClick={(node) => setSelectedNode(node)}
                 colorBy={colorBy}
+                onColorByChange={setColorBy}
                 highlightedNode={selectedNode?.id}
               />
             </CardContent>
