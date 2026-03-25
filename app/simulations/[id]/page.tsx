@@ -34,6 +34,8 @@ import { BranchComparison } from "@/components/simulation/branch-comparison"
 import { ExportDialog } from "@/components/simulation/export-dialog"
 import { ProbabilityDisplay } from "@/components/simulation/probability-display"
 import { NetworkPredictionsPanel } from "@/components/simulation/network-predictions-panel"
+import { NetworkAnalysisPanel } from "@/components/network/network-analysis-panel"
+import { NetworkHealthDashboard } from "@/components/network/network-health-dashboard"
 
 interface LandscapeAnalysis {
   executive_summary: string
@@ -870,6 +872,10 @@ export default function SimulationDetailPage() {
               <TrendingUp className="w-4 h-4" />
               Year Summary
             </TabsTrigger>
+            <TabsTrigger value="network" className="flex items-center gap-1">
+              <Network className="w-4 h-4" />
+              Network State
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="responses" className="space-y-4">
@@ -954,6 +960,159 @@ export default function SimulationDetailPage() {
               landscapeSnapshot={selectedYearData.landscape_snapshot}
               recommendations={selectedYearData.recommendations}
             />
+          </TabsContent>
+
+          <TabsContent value="network" className="space-y-6">
+            <div className="grid gap-6">
+              {/* Network Metrics from this year */}
+              {selectedYearData.metrics?.network && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Network Metrics - Year {selectedYearData.year_number}</CardTitle>
+                    <CardDescription>
+                      Network structure and health at the end of this simulation year
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="p-4 bg-muted rounded-lg text-center">
+                        <p className="text-2xl font-bold">
+                          {(selectedYearData.metrics.network.density * 100).toFixed(1)}%
+                        </p>
+                        <p className="text-sm text-muted-foreground">Network Density</p>
+                      </div>
+                      <div className="p-4 bg-muted rounded-lg text-center">
+                        <p className="text-2xl font-bold">
+                          {selectedYearData.metrics.network.averageDegree?.toFixed(1) || "0"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Avg Connections</p>
+                      </div>
+                      <div className="p-4 bg-muted rounded-lg text-center">
+                        <p className="text-2xl font-bold">
+                          {(selectedYearData.metrics.network.clusteringCoefficient * 100).toFixed(1)}%
+                        </p>
+                        <p className="text-sm text-muted-foreground">Clustering</p>
+                      </div>
+                      <div className="p-4 bg-muted rounded-lg text-center">
+                        <p className="text-2xl font-bold">
+                          {((selectedYearData.metrics.network.networkHealthScore || 0.5) * 100).toFixed(0)}%
+                        </p>
+                        <p className="text-sm text-muted-foreground">Network Health</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 mt-4">
+                      <div className="text-center">
+                        <p className="text-lg font-semibold text-green-600">
+                          {selectedYearData.metrics.network.centralEntitiesCount || 0}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Central Hubs</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-semibold text-blue-600">
+                          {selectedYearData.metrics.network.keyBridgesCount || 0}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Key Bridges</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-semibold text-amber-600">
+                          {selectedYearData.metrics.network.isolatedEntitiesCount || 0}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Isolated</p>
+                      </div>
+                    </div>
+                    {selectedYearData.metrics.network.communityStructure && (
+                      <p className="text-sm text-muted-foreground mt-4 text-center">
+                        Network Structure: <span className="font-medium capitalize">{selectedYearData.metrics.network.communityStructure}</span>
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Network Evolution from landscape snapshot */}
+              {selectedYearData.landscape_snapshot?.network_evolution && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Network Evolution</CardTitle>
+                    <CardDescription>
+                      How relationships changed during Year {selectedYearData.year_number}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={
+                        selectedYearData.landscape_snapshot.network_evolution.structure_change === "strengthening" ? "default" :
+                        selectedYearData.landscape_snapshot.network_evolution.structure_change === "fragmenting" ? "destructive" :
+                        "secondary"
+                      }>
+                        {selectedYearData.landscape_snapshot.network_evolution.structure_change || "stable"}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">Structure Change</span>
+                    </div>
+                    
+                    {selectedYearData.landscape_snapshot.network_evolution.new_connections_forming?.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-green-600 mb-1">New Connections Forming:</p>
+                        <ul className="text-sm text-muted-foreground space-y-1">
+                          {selectedYearData.landscape_snapshot.network_evolution.new_connections_forming.map((conn: string, i: number) => (
+                            <li key={i} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                              {conn}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {selectedYearData.landscape_snapshot.network_evolution.connections_at_risk?.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-amber-600 mb-1">Connections At Risk:</p>
+                        <ul className="text-sm text-muted-foreground space-y-1">
+                          {selectedYearData.landscape_snapshot.network_evolution.connections_at_risk.map((conn: string, i: number) => (
+                            <li key={i} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              {conn}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {selectedYearData.landscape_snapshot.network_evolution.analysis && (
+                      <p className="text-sm text-muted-foreground border-t pt-3 mt-3">
+                        {selectedYearData.landscape_snapshot.network_evolution.analysis}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Live Network Visualization */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Current Network Graph</CardTitle>
+                  <CardDescription>
+                    Interactive visualization of community relationships
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <NetworkAnalysisPanel communityId={simulation.communities.id} />
+                </CardContent>
+              </Card>
+
+              {/* Network Health Dashboard */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Network Health Analysis</CardTitle>
+                  <CardDescription>
+                    Vulnerabilities, coalitions, and strategic opportunities
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <NetworkHealthDashboard communityId={simulation.communities.id} />
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       )}
