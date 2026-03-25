@@ -155,6 +155,23 @@ export async function POST(
       ? `\n\nEXTERNAL EVENTS THIS YEAR:\n${yearEvents.map(e => `- ${e.event_type.toUpperCase()}: ${e.title} - ${e.description}`).join("\n")}`
       : ""
 
+    // Analyze network structure for enhanced simulation
+    const entityIds = communityEntities.map(ce => (ce.entities as any)?.id).filter(Boolean)
+    const networkAnalysis = await analyzeNetworkStructure(supabase, simulation.community_id, entityIds)
+    
+    // Build network context for AI
+    const networkContext = `
+NETWORK STRUCTURE ANALYSIS:
+- Total Connections: ${networkAnalysis.totalConnections}
+- Network Density: ${(networkAnalysis.networkDensity * 100).toFixed(1)}% (${networkAnalysis.communityStructure})
+- Average Connections per Entity: ${networkAnalysis.averageDegree.toFixed(1)}
+- Clustering Coefficient: ${(networkAnalysis.clusteringCoefficient * 100).toFixed(1)}%
+- Key Bridge Entities: ${networkAnalysis.keyBridges.length > 0 ? communityEntities.filter(ce => networkAnalysis.keyBridges.includes((ce.entities as any)?.id)).map(ce => (ce.entities as any)?.name).join(", ") : "None identified"}
+- Central Hub Entities: ${networkAnalysis.centralEntities.length > 0 ? communityEntities.filter(ce => networkAnalysis.centralEntities.includes((ce.entities as any)?.id)).map(ce => (ce.entities as any)?.name).join(", ") : "None"}
+- Isolated Entities: ${networkAnalysis.isolatedEntities.length > 0 ? communityEntities.filter(ce => networkAnalysis.isolatedEntities.includes((ce.entities as any)?.id)).map(ce => (ce.entities as any)?.name).join(", ") : "None"}
+
+This network structure affects how information flows and coalitions form. Entities with more connections have greater influence but also face more cross-pressures.`
+
     // Get milestones for progress tracking
     const { data: milestones } = await supabase
       .from("simulation_milestones")
@@ -183,8 +200,8 @@ Year: ${yearToProcess} of ${simulation.total_years} (Calendar Year: ${calendarYe
         ).join("\n")}`
       : ""
 
-    // Add events context
-    const fullContext = `${communityContext}${previousYearContext}${eventsContext}`
+    // Add events context and network context
+    const fullContext = `${communityContext}${previousYearContext}${eventsContext}${networkContext}`
 
     // Check for existing manual responses for this year
     const { data: existingResponses } = await supabase
@@ -220,6 +237,17 @@ Year: ${yearToProcess} of ${simulation.total_years} (Calendar Year: ${calendarYe
         // Build entity profile for AI
         const entityProfile = buildEntityProfile(entity, ce.stakeholder_role)
         
+        // Get entity's network position
+        const entityNetworkMetrics = networkAnalysis.entityMetrics.get(entity.id)
+        const networkPositionContext = entityNetworkMetrics ? `
+NETWORK POSITION:
+- Connections: ${entityNetworkMetrics.degree} relationships
+- Role: ${entityNetworkMetrics.networkRole}
+- Clustering: ${(entityNetworkMetrics.clusterCoefficient * 100).toFixed(0)}% of their contacts know each other
+${entityNetworkMetrics.isKeyBridge ? "- KEY BRIDGE: This entity connects otherwise separate groups - their position gives them unique influence and access to diverse information" : ""}
+${entityNetworkMetrics.degree === 0 ? "- ISOLATED: This entity has no established relationships - they may be new or operate independently" : ""}
+${entityNetworkMetrics.degree >= 5 ? "- HIGHLY CONNECTED: This entity is a hub with many relationships - their actions affect many others and they face pressure from multiple directions" : ""}` : ""
+        
         // Get entity memory for consistency
         const memory = memoryByEntity.get(entity.id)
         const memoryContext = memory ? `
@@ -238,12 +266,14 @@ If they change position, explicitly explain why.` : ""
 You must respond AS the organization, based on their profile, values, resources, and strategic priorities.
 Be specific about what actions they would take, what resources they would commit, and who they might partner with.
 Consider their risk tolerance, collaboration willingness, and decision-making style.
+Consider their position in the community network - highly connected entities face more pressure to act and coordinate, while bridge entities can play unique connecting roles.
 CRITICAL: If this organization has taken positions before, you must be consistent unless circumstances clearly justify a change.
 Output should be 2-4 paragraphs describing their response and decisions for this year.`,
           `${fullContext}
 ${memoryContext}
 
 You are responding as: ${entity.name}
+${networkPositionContext}
 
 Organization Profile:
 ${entityProfile}
@@ -467,7 +497,7 @@ Return JSON with:
       // Use defaults
     }
 
-    // Generate landscape snapshot
+    // Generate landscape snapshot with network analysis
     const landscapeSnapshotJson = await callAnthropic(
       `You are analyzing the current state of a community after a simulation year. Return valid JSON only.`,
       `Analyze the community landscape after Year ${yearToProcess}:
@@ -475,6 +505,15 @@ Return JSON with:
 Community: ${simulation.communities.name}
 Scenario: ${simulation.scenario}
 Starting Conditions: ${JSON.stringify(simulation.starting_conditions?.landscape_analysis || {})}
+
+Network Structure:
+- Density: ${(networkAnalysis.networkDensity * 100).toFixed(1)}%
+- Average Connections: ${networkAnalysis.averageDegree.toFixed(1)}
+- Clustering: ${(networkAnalysis.clusteringCoefficient * 100).toFixed(1)}%
+- Structure Type: ${networkAnalysis.communityStructure}
+- Key Bridges: ${networkAnalysis.keyBridges.length}
+- Central Hubs: ${networkAnalysis.centralEntities.length}
+- Isolated Entities: ${networkAnalysis.isolatedEntities.length}
 
 All Entity Responses This Year:
 ${responses.map(r => `- ${r.entities?.name || "Unknown"}: ${r.response_type} - ${r.reasoning}`).join("\n")}
@@ -502,15 +541,30 @@ Return JSON with:
     "confidence": 0.0-1.0,
     "key_factors": ["factors driving momentum"]
   },
+  "network_evolution": {
+    "structure_change": "strengthening" | "fragmenting" | "stable" | "reorganizing",
+    "new_connections_forming": ["pairs of entities forming new ties"],
+    "connections_at_risk": ["pairs of entities with strained relationships"],
+    "bridge_entities": ["entities connecting different groups"],
+    "analysis": "brief analysis of how the network is evolving"
+  },
   "narrative_summary": "2-3 sentence narrative of the current landscape"
 }`
     )
 
-    let landscapeSnapshot = {
+    let landscapeSnapshot: {
+      power_dynamics: { dominant_forces: string[]; emerging_powers: string[]; declining_powers: string[]; analysis: string };
+      alliances: { formed: any[]; strengthened: any[]; strained: any[] };
+      resources: { committed: string; gaps: string[]; opportunities: string[] };
+      momentum: { direction: string; confidence: number; key_factors: string[] };
+      network_evolution?: { structure_change: string; new_connections_forming: string[]; connections_at_risk: string[]; bridge_entities: string[]; analysis: string };
+      narrative_summary: string;
+    } = {
       power_dynamics: { dominant_forces: [], emerging_powers: [], declining_powers: [], analysis: "" },
       alliances: { formed: [], strengthened: [], strained: [] },
       resources: { committed: "Unknown", gaps: [], opportunities: [] },
       momentum: { direction: "neutral", confidence: 0.5, key_factors: [] },
+      network_evolution: { structure_change: "stable", new_connections_forming: [], connections_at_risk: [], bridge_entities: [], analysis: "" },
       narrative_summary: "The community landscape remains stable.",
     }
 
@@ -701,7 +755,7 @@ Return JSON: {"current_value": number, "progress_percentage": number, "is_achiev
       }
     }
 
-    // Calculate branch probability
+    // Calculate branch probability with network health factor
     const supportiveCount = responses.filter(r => r.response_type === "supportive").length
     const opposedCount = responses.filter(r => r.response_type === "opposed").length
     const totalResponses = responses.length
@@ -711,11 +765,29 @@ Return JSON: {"current_value": number, "progress_percentage": number, "is_achiev
     const momentumDirection = landscapeSnapshot.momentum?.direction === "favorable" ? 1.2 :
                               landscapeSnapshot.momentum?.direction === "unfavorable" ? 0.8 : 1.0
 
-    // Base probability calculation
-    let branchProbability = (supportRatio * 0.4 + momentumFactor * 0.3 + (1 - opposedCount/Math.max(totalResponses, 1)) * 0.3) * momentumDirection
+    // Network health factors
+    // Higher density = better coordination = higher success probability
+    const networkDensityFactor = 0.5 + networkAnalysis.networkDensity * 0.5 // 0.5 to 1.0
+    // Higher clustering = stronger coalitions = more resilient
+    const clusteringFactor = 0.5 + networkAnalysis.clusteringCoefficient * 0.5 // 0.5 to 1.0
+    // More isolated entities = weaker network = lower probability
+    const isolationPenalty = networkAnalysis.isolatedEntities.length / Math.max(entityIds.length, 1)
+    // Key bridges can be points of fragility or strength
+    const bridgeFactor = networkAnalysis.keyBridges.length > 0 ? 1.05 : 1.0 // Slight bonus for bridges
+
+    // Network health score (0.5 to 1.2)
+    const networkHealthFactor = ((networkDensityFactor + clusteringFactor) / 2) * (1 - isolationPenalty * 0.3) * bridgeFactor
+
+    // Base probability calculation with network health
+    let branchProbability = (
+      supportRatio * 0.35 + 
+      momentumFactor * 0.25 + 
+      (1 - opposedCount/Math.max(totalResponses, 1)) * 0.25 +
+      (networkHealthFactor - 0.5) * 0.15 // Network contributes up to 15%
+    ) * momentumDirection
     branchProbability = Math.max(0.05, Math.min(0.95, branchProbability)) // Clamp between 5% and 95%
 
-    // Update year record as completed with all summaries
+    // Update year record as completed with all summaries including network metrics
     await supabase
       .from("simulation_years")
       .update({
@@ -724,6 +796,26 @@ Return JSON: {"current_value": number, "progress_percentage": number, "is_achiev
         opposition_summary: oppositionSummary,
         landscape_snapshot: landscapeSnapshot,
         recommendations: recommendations,
+        metrics: {
+          ...(yearRecord.metrics || {}),
+          network: {
+            density: networkAnalysis.networkDensity,
+            averageDegree: networkAnalysis.averageDegree,
+            clusteringCoefficient: networkAnalysis.clusteringCoefficient,
+            communityStructure: networkAnalysis.communityStructure,
+            keyBridgesCount: networkAnalysis.keyBridges.length,
+            centralEntitiesCount: networkAnalysis.centralEntities.length,
+            isolatedEntitiesCount: networkAnalysis.isolatedEntities.length,
+            totalConnections: networkAnalysis.totalConnections,
+            networkHealthScore: networkHealthFactor,
+          },
+          support: {
+            supportive: supportiveCount,
+            opposed: opposedCount,
+            total: totalResponses,
+            ratio: supportRatio,
+          },
+        },
         completed_at: new Date().toISOString(),
       })
       .eq("id", yearRecord.id)
@@ -761,6 +853,181 @@ Return JSON: {"current_value": number, "progress_percentage": number, "is_achiev
   } catch (error: any) {
     console.error("Error running simulation year:", error)
     return NextResponse.json({ error: error.message || "Failed to run simulation year" }, { status: 500 })
+  }
+}
+
+// Helper to calculate network metrics for an entity
+function calculateEntityNetworkMetrics(
+  entityId: string,
+  relationships: Array<{ source_id: string; target_id: string; strength: number; type: string }>,
+  entityIds: Set<string>
+): {
+  degree: number
+  betweenness: number
+  isKeyBridge: boolean
+  clusterCoefficient: number
+  networkRole: string
+} {
+  // Calculate degree centrality
+  const connections = relationships.filter(
+    r => (r.source_id === entityId || r.target_id === entityId) && 
+        entityIds.has(r.source_id) && entityIds.has(r.target_id)
+  )
+  const degree = connections.length
+
+  // Get neighbors
+  const neighbors = new Set<string>()
+  connections.forEach(r => {
+    if (r.source_id === entityId) neighbors.add(r.target_id)
+    else neighbors.add(r.source_id)
+  })
+
+  // Calculate clustering coefficient (how connected are neighbors to each other)
+  let neighborConnections = 0
+  const neighborArray = Array.from(neighbors)
+  for (let i = 0; i < neighborArray.length; i++) {
+    for (let j = i + 1; j < neighborArray.length; j++) {
+      const connected = relationships.some(
+        r => (r.source_id === neighborArray[i] && r.target_id === neighborArray[j]) ||
+             (r.source_id === neighborArray[j] && r.target_id === neighborArray[i])
+      )
+      if (connected) neighborConnections++
+    }
+  }
+  const maxPossible = (neighbors.size * (neighbors.size - 1)) / 2
+  const clusterCoefficient = maxPossible > 0 ? neighborConnections / maxPossible : 0
+
+  // Simplified betweenness - count how many entity pairs this node connects
+  let betweennessScore = 0
+  const allEntityIds = Array.from(entityIds)
+  for (let i = 0; i < allEntityIds.length; i++) {
+    for (let j = i + 1; j < allEntityIds.length; j++) {
+      if (allEntityIds[i] === entityId || allEntityIds[j] === entityId) continue
+      
+      // Check if entity is on a path between these two
+      const iNeighbors = new Set(
+        relationships
+          .filter(r => r.source_id === allEntityIds[i] || r.target_id === allEntityIds[i])
+          .map(r => r.source_id === allEntityIds[i] ? r.target_id : r.source_id)
+      )
+      const jNeighbors = new Set(
+        relationships
+          .filter(r => r.source_id === allEntityIds[j] || r.target_id === allEntityIds[j])
+          .map(r => r.source_id === allEntityIds[j] ? r.target_id : r.source_id)
+      )
+      
+      if (iNeighbors.has(entityId) && jNeighbors.has(entityId)) {
+        betweennessScore++
+      }
+    }
+  }
+  const maxBetweenness = ((entityIds.size - 1) * (entityIds.size - 2)) / 2
+  const betweenness = maxBetweenness > 0 ? betweennessScore / maxBetweenness : 0
+
+  // Determine if this is a key bridge (high betweenness, low clustering)
+  const isKeyBridge = betweenness > 0.1 && clusterCoefficient < 0.3
+
+  // Determine network role
+  let networkRole = "Peripheral"
+  if (degree >= 5 && clusterCoefficient > 0.5) {
+    networkRole = "Hub Leader"
+  } else if (isKeyBridge) {
+    networkRole = "Bridge Connector"
+  } else if (degree >= 3) {
+    networkRole = "Active Participant"
+  } else if (degree >= 1) {
+    networkRole = "Peripheral Participant"
+  } else {
+    networkRole = "Isolated"
+  }
+
+  return {
+    degree,
+    betweenness,
+    isKeyBridge,
+    clusterCoefficient,
+    networkRole,
+  }
+}
+
+// Helper to analyze network structure
+async function analyzeNetworkStructure(
+  supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never,
+  communityId: string,
+  entityIds: string[]
+): Promise<{
+  totalConnections: number
+  averageDegree: number
+  networkDensity: number
+  clusteringCoefficient: number
+  keyBridges: string[]
+  centralEntities: string[]
+  isolatedEntities: string[]
+  communityStructure: string
+  entityMetrics: Map<string, ReturnType<typeof calculateEntityNetworkMetrics>>
+}> {
+  // Get all relationships for entities in this community
+  const { data: relationships } = await supabase
+    .from("entity_relationships")
+    .select("source_entity_id, target_entity_id, relationship_type, strength")
+    .or(`source_entity_id.in.(${entityIds.join(",")}),target_entity_id.in.(${entityIds.join(",")})`)
+
+  const entityIdSet = new Set(entityIds)
+  const normalizedRelationships = (relationships || [])
+    .filter(r => entityIdSet.has(r.source_entity_id) && entityIdSet.has(r.target_entity_id))
+    .map(r => ({
+      source_id: r.source_entity_id,
+      target_id: r.target_entity_id,
+      strength: r.strength || 5,
+      type: r.relationship_type,
+    }))
+
+  // Calculate metrics for each entity
+  const entityMetrics = new Map<string, ReturnType<typeof calculateEntityNetworkMetrics>>()
+  const centralEntities: string[] = []
+  const isolatedEntities: string[] = []
+  const keyBridges: string[] = []
+
+  for (const entityId of entityIds) {
+    const metrics = calculateEntityNetworkMetrics(entityId, normalizedRelationships, entityIdSet)
+    entityMetrics.set(entityId, metrics)
+    
+    if (metrics.degree >= 5) centralEntities.push(entityId)
+    if (metrics.degree === 0) isolatedEntities.push(entityId)
+    if (metrics.isKeyBridge) keyBridges.push(entityId)
+  }
+
+  // Network-level metrics
+  const totalConnections = normalizedRelationships.length
+  const maxConnections = (entityIds.length * (entityIds.length - 1)) / 2
+  const networkDensity = maxConnections > 0 ? totalConnections / maxConnections : 0
+  
+  const degrees = Array.from(entityMetrics.values()).map(m => m.degree)
+  const averageDegree = degrees.length > 0 ? degrees.reduce((a, b) => a + b, 0) / degrees.length : 0
+  
+  const clusterCoeffs = Array.from(entityMetrics.values()).map(m => m.clusterCoefficient)
+  const clusteringCoefficient = clusterCoeffs.length > 0 ? clusterCoeffs.reduce((a, b) => a + b, 0) / clusterCoeffs.length : 0
+
+  // Determine community structure
+  let communityStructure = "sparse"
+  if (networkDensity > 0.3 && clusteringCoefficient > 0.4) {
+    communityStructure = "tightly-knit"
+  } else if (networkDensity > 0.15) {
+    communityStructure = "moderately-connected"
+  } else if (keyBridges.length > entityIds.length * 0.1) {
+    communityStructure = "bridge-dependent"
+  }
+
+  return {
+    totalConnections,
+    averageDegree,
+    networkDensity,
+    clusteringCoefficient,
+    keyBridges,
+    centralEntities,
+    isolatedEntities,
+    communityStructure,
+    entityMetrics,
   }
 }
 

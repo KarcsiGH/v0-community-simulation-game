@@ -27,6 +27,8 @@ import {
 import type { Community, Candidate, Entity } from "@/lib/entity-types"
 import { BatchEntityPopulator } from "@/components/batch-entity-populator"
 import { NetworkAnalysisPanel } from "@/components/network/network-analysis-panel"
+import { NetworkHealthDashboard } from "@/components/network/network-health-dashboard"
+import { NetworkPredictionsPanel } from "@/components/simulation/network-predictions-panel"
 import { DeepDiscoveryPanel } from "@/components/community/deep-discovery-panel"
 
 const stakeholderRoleConfig: Record<string, { label: string; color: string }> = {
@@ -519,7 +521,25 @@ export default function CommunityDetailPage() {
         </TabsContent>
 
         <TabsContent value="network" className="space-y-6">
-          <NetworkAnalysisPanel communityId={id} />
+          <Tabs defaultValue="analysis" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="analysis">Network Graph</TabsTrigger>
+              <TabsTrigger value="health">Health Dashboard</TabsTrigger>
+              <TabsTrigger value="predictions">Predictions</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="analysis">
+              <NetworkAnalysisPanel communityId={id} />
+            </TabsContent>
+            
+            <TabsContent value="health">
+              <NetworkHealthDashboard communityId={id} />
+            </TabsContent>
+            
+            <TabsContent value="predictions">
+              <NetworkPredictionsPanel communityId={id} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="deep-discovery" className="space-y-6">

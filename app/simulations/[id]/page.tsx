@@ -23,7 +23,8 @@ import {
   ArrowLeft, Play, Pause, CheckCircle, Clock, Users, 
   MessageSquare, GitBranch, TrendingUp, Calendar,
   Building2, ChevronRight, Loader2, Map, AlertTriangle,
-  Lightbulb, Target, Handshake, Shield, UserCog, Pencil, X
+  Lightbulb, Target, Handshake, Shield, UserCog, Pencil, X,
+  Network
 } from "lucide-react"
 import { BranchMap } from "@/components/simulation/branch-map"
 import { YearSummaryDisplay } from "@/components/simulation/year-summary"
@@ -32,6 +33,7 @@ import { MilestoneTracker } from "@/components/simulation/milestone-tracker"
 import { BranchComparison } from "@/components/simulation/branch-comparison"
 import { ExportDialog } from "@/components/simulation/export-dialog"
 import { ProbabilityDisplay } from "@/components/simulation/probability-display"
+import { NetworkPredictionsPanel } from "@/components/simulation/network-predictions-panel"
 
 interface LandscapeAnalysis {
   executive_summary: string
@@ -954,6 +956,24 @@ export default function SimulationDetailPage() {
             />
           </TabsContent>
         </Tabs>
+      )}
+
+      {/* Network Predictions - Show when simulation has started */}
+      {simulation.current_year > 0 && simulation.current_year < simulation.total_years && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Network className="w-5 h-5" />
+              Network Evolution Predictions
+            </CardTitle>
+            <CardDescription>
+              Predict how relationships and power dynamics will evolve over the remaining {simulation.total_years - simulation.current_year} years
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <NetworkPredictionsPanel simulationId={id} />
+          </CardContent>
+        </Card>
       )}
 
       {/* Landscape Analysis Section - Show before simulation starts or as a tab */}
