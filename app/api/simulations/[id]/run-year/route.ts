@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 
 // Direct Anthropic API call to bypass AI SDK compatibility issues
 async function callAnthropic(system: string, prompt: string): Promise<string> {
+  console.log("[v0] callAnthropic - Starting API call")
+  console.log("[v0] ANTHROPIC_API_KEY exists:", !!process.env.ANTHROPIC_API_KEY)
+  
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -18,12 +21,16 @@ async function callAnthropic(system: string, prompt: string): Promise<string> {
     }),
   })
 
+  console.log("[v0] callAnthropic - Response status:", response.status)
+  
   if (!response.ok) {
     const error = await response.text()
+    console.log("[v0] callAnthropic - Error:", error)
     throw new Error(`Anthropic API error: ${error}`)
   }
 
   const data = await response.json()
+  console.log("[v0] callAnthropic - Success, got response")
   return data.content[0]?.text || ""
 }
 
@@ -428,6 +435,7 @@ Write a 2-3 paragraph narrative summary of what happened this year, including:
     )
 
     // Generate opposition summary
+    console.log("[v0] Generating opposition summary...")
     const oppositionSummaryJson = await callAnthropic(
       `You are analyzing opposition and resistance in a community simulation. Return valid JSON only.`,
       `Analyze the opposition and resistance from Year ${yearToProcess}:
@@ -462,12 +470,15 @@ Return JSON with:
       const jsonMatch = oppositionSummaryJson.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         oppositionSummary = JSON.parse(jsonMatch[0])
+        console.log("[v0] Parsed opposition summary successfully")
       }
-    } catch {
+    } catch (e) {
+      console.log("[v0] Failed to parse opposition summary:", e)
       // Use defaults
     }
 
     // Generate landscape snapshot
+    console.log("[v0] Generating landscape snapshot...")
     const landscapeSnapshotJson = await callAnthropic(
       `You are analyzing the current state of a community after a simulation year. Return valid JSON only.`,
       `Analyze the community landscape after Year ${yearToProcess}:
@@ -524,6 +535,7 @@ Return JSON with:
     }
 
     // Generate strategic recommendations
+    console.log("[v0] Generating strategic recommendations...")
     const recommendationsJson = await callAnthropic(
       `You are a strategic advisor providing recommendations based on a community simulation year. Return valid JSON only.`,
       `Provide strategic recommendations after Year ${yearToProcess}:
@@ -579,8 +591,10 @@ Return JSON with:
       const jsonMatch = recommendationsJson.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         recommendations = JSON.parse(jsonMatch[0])
+        console.log("[v0] Parsed recommendations successfully")
       }
-    } catch {
+    } catch (e) {
+      console.log("[v0] Failed to parse recommendations:", e)
       // Use defaults
     }
 
@@ -716,7 +730,12 @@ Return JSON: {"current_value": number, "progress_percentage": number, "is_achiev
     branchProbability = Math.max(0.05, Math.min(0.95, branchProbability)) // Clamp between 5% and 95%
 
     // Update year record as completed with all summaries
-    await supabase
+    console.log("[v0] Saving to database - year record id:", yearRecord.id)
+    console.log("[v0] Has opposition data:", !!oppositionSummary, "keys:", Object.keys(oppositionSummary || {}))
+    console.log("[v0] Has landscape data:", !!landscapeSnapshot, "keys:", Object.keys(landscapeSnapshot || {}))
+    console.log("[v0] Has recommendations data:", !!recommendations, "keys:", Object.keys(recommendations || {}))
+    
+    const { error: updateError } = await supabase
       .from("simulation_years")
       .update({
         status: "completed",
@@ -727,6 +746,12 @@ Return JSON: {"current_value": number, "progress_percentage": number, "is_achiev
         completed_at: new Date().toISOString(),
       })
       .eq("id", yearRecord.id)
+    
+    if (updateError) {
+      console.log("[v0] Database update error:", updateError)
+    } else {
+      console.log("[v0] Database update successful")
+    }
 
     // Update simulation current year and branch probability
     const newStatus = yearToProcess >= simulation.total_years ? "completed" : "running"
