@@ -417,6 +417,8 @@ Return JSON with:
       }
     }
 
+    console.log("[v0] Finished processing all entities. Responses:", responses.length, "Errors:", errors.length)
+    
     // Generate year summary
     const yearSummary = await callAnthropic(
       `You are summarizing a year in a community simulation. Be concise but capture key events and dynamics.`,
@@ -433,6 +435,8 @@ Write a 2-3 paragraph narrative summary of what happened this year, including:
 - Emerging coalitions or conflicts
 - Progress toward or away from community goals`
     )
+    
+    console.log("[v0] Year summary generated, length:", yearSummary?.length)
 
     // Generate opposition summary
     console.log("[v0] Generating opposition summary...")
