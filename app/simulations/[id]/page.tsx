@@ -944,14 +944,16 @@ export default function SimulationDetailPage() {
           </TabsContent>
 
           <TabsContent value="summary">
-            <YearSummaryDisplay
-              yearNumber={selectedYearData.year_number}
-              calendarYear={(simulation.parameters?.starting_year || 2026) + selectedYearData.year_number - 1}
-              yearSummary={selectedYearData.year_summary || "No summary available yet."}
-              oppositionSummary={selectedYearData.opposition_summary}
-              landscapeSnapshot={selectedYearData.landscape_snapshot}
-              recommendations={selectedYearData.recommendations}
-            />
+<YearSummaryDisplay
+                yearNumber={selectedYearData.year_number}
+                calendarYear={(simulation.parameters?.starting_year || 2026) + selectedYearData.year_number - 1}
+                yearSummary={selectedYearData.year_summary || "No summary available yet."}
+                oppositionSummary={selectedYearData.opposition_summary}
+                landscapeSnapshot={selectedYearData.landscape_snapshot}
+                recommendations={selectedYearData.recommendations}
+                simulationId={simulation.id}
+                onAnalysisGenerated={() => fetchSimulation()}
+              />
           </TabsContent>
         </Tabs>
       )}

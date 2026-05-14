@@ -1,12 +1,14 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Shield, Users, TrendingUp, TrendingDown, Minus, 
   AlertTriangle, Lightbulb, Target, Handshake, 
-  Eye, ArrowRight, CheckCircle, XCircle
+  Eye, ArrowRight, CheckCircle, XCircle, Loader2, Sparkles
 } from "lucide-react"
 
 interface OppositionSummary {
@@ -77,6 +79,8 @@ interface YearSummaryProps {
   oppositionSummary?: OppositionSummary
   landscapeSnapshot?: LandscapeSnapshot
   recommendations?: Recommendations
+  simulationId?: string
+  onAnalysisGenerated?: () => void
 }
 
 export function YearSummaryDisplay({
@@ -86,7 +90,42 @@ export function YearSummaryDisplay({
   oppositionSummary,
   landscapeSnapshot,
   recommendations,
+  simulationId,
+  onAnalysisGenerated,
 }: YearSummaryProps) {
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  const hasAnyAnalysis = oppositionSummary || landscapeSnapshot || recommendations
+  const isMissingAnalysis = !oppositionSummary || !landscapeSnapshot || !recommendations
+  
+  const generateMissingAnalysis = async () => {
+    if (!simulationId) return
+    
+    setGenerating(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(`/api/simulations/${simulationId}/backfill-analysis`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yearNumber }),
+      })
+      
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to generate analysis")
+      }
+      
+      // Trigger refresh
+      onAnalysisGenerated?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate analysis")
+    } finally {
+      setGenerating(false)
+    }
+  }
+  
   const getMomentumIcon = (direction?: string) => {
     switch (direction) {
       case "favorable":
@@ -292,14 +331,30 @@ export function YearSummaryDisplay({
               </Card>
             </>
           ) : (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No landscape analysis available for this year.
-              </CardContent>
-            </Card>
+          <Card>
+            <CardContent className="py-8 text-center">
+              <p className="text-muted-foreground mb-4">No landscape analysis available for this year.</p>
+              {simulationId && (
+                <Button onClick={generateMissingAnalysis} disabled={generating} variant="outline">
+                  {generating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating Analysis...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate Analysis
+                    </>
+                  )}
+                </Button>
+              )}
+              {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+            </CardContent>
+          </Card>
           )}
         </TabsContent>
-
+        
         {/* Opposition Tab */}
         <TabsContent value="opposition" className="mt-4 space-y-4">
           {oppositionSummary ? (
@@ -407,14 +462,30 @@ export function YearSummaryDisplay({
               )}
             </>
           ) : (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No opposition analysis available for this year.
-              </CardContent>
-            </Card>
+          <Card>
+            <CardContent className="py-8 text-center">
+              <p className="text-muted-foreground mb-4">No opposition analysis available for this year.</p>
+              {simulationId && (
+                <Button onClick={generateMissingAnalysis} disabled={generating} variant="outline">
+                  {generating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating Analysis...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate Analysis
+                    </>
+                  )}
+                </Button>
+              )}
+              {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+            </CardContent>
+          </Card>
           )}
         </TabsContent>
-
+        
         {/* Recommendations Tab */}
         <TabsContent value="recommendations" className="mt-4 space-y-4">
           {recommendations ? (
@@ -563,11 +634,27 @@ export function YearSummaryDisplay({
               </div>
             </>
           ) : (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No recommendations available for this year.
-              </CardContent>
-            </Card>
+          <Card>
+            <CardContent className="py-8 text-center">
+              <p className="text-muted-foreground mb-4">No recommendations available for this year.</p>
+              {simulationId && (
+                <Button onClick={generateMissingAnalysis} disabled={generating} variant="outline">
+                  {generating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating Analysis...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate Analysis
+                    </>
+                  )}
+                </Button>
+              )}
+              {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+            </CardContent>
+          </Card>
           )}
         </TabsContent>
       </Tabs>
