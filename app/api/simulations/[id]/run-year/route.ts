@@ -1,6 +1,28 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
+// Process items in parallel batches
+async function processBatch<T, R>(
+  items: T[],
+  batchSize: number,
+  processor: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = []
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize)
+    console.log(`[v0] Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(items.length / batchSize)} (${batch.length} items)`)
+    const batchResults = await Promise.all(
+      batch.map((item, idx) => processor(item, i + idx))
+    )
+    results.push(...batchResults)
+    // Small delay between batches to avoid rate limiting
+    if (i + batchSize < items.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  }
+  return results
+}
+
 // Direct Anthropic API call to bypass AI SDK compatibility issues
 async function callAnthropic(system: string, prompt: string): Promise<string> {
   console.log("[v0] callAnthropic - Starting API call")
@@ -208,6 +230,10 @@ Year: ${yearToProcess} of ${simulation.total_years} (Calendar Year: ${calendarYe
     // Generate responses for each entity
     const responses = []
     const errors = []
+    const totalEntities = communityEntities.filter(ce => ce.entities && !manualEntityIds.has((ce.entities as any).id)).length
+    let processedCount = 0
+
+    console.log(`[v0] Starting entity processing: ${totalEntities} entities to process (${manualEntityIds.size} manual)`)
 
     for (const ce of communityEntities) {
       const entity = ce.entities as Record<string, any>
@@ -224,6 +250,9 @@ Year: ${yearToProcess} of ${simulation.total_years} (Calendar Year: ${calendarYe
       }
 
       try {
+        processedCount++
+        console.log(`[v0] Processing entity ${processedCount}/${totalEntities}: ${entity.name}`)
+        
         // Build entity profile for AI
         const entityProfile = buildEntityProfile(entity, ce.stakeholder_role)
         
@@ -239,14 +268,15 @@ IMPORTANT - This organization's history in this simulation:
 You MUST maintain consistency with their previous positions unless something significant has changed.
 If they change position, explicitly explain why.` : ""
         
-        // Generate response using direct Anthropic API
-        const responseText = await callAnthropic(
+        // Generate response AND structured decisions in a SINGLE API call to reduce processing time
+        const combinedResponse = await callAnthropic(
           `You are simulating how an organization would respond to a community scenario. 
 You must respond AS the organization, based on their profile, values, resources, and strategic priorities.
 Be specific about what actions they would take, what resources they would commit, and who they might partner with.
 Consider their risk tolerance, collaboration willingness, and decision-making style.
 CRITICAL: If this organization has taken positions before, you must be consistent unless circumstances clearly justify a change.
-Output should be 2-4 paragraphs describing their response and decisions for this year.`,
+
+IMPORTANT: You must respond with BOTH a narrative response AND structured JSON data in a specific format.`,
           `${fullContext}
 ${memoryContext}
 
@@ -255,24 +285,14 @@ You are responding as: ${entity.name}
 Organization Profile:
 ${entityProfile}
 
-Based on this organization's profile and the scenario, describe:
-1. Their response to the scenario this year
-2. Specific decisions they make
-3. Resources they commit (if any) - be specific with dollar amounts or staff time
-4. Organizations they seek to partner with (from the community)
-5. Any concerns or opposition they have
-6. How their relationships with other entities have changed
+Based on this organization's profile and the scenario, provide:
 
-Respond in first person plural ("We will..." or "Our organization...")`
-        )
+PART 1 - NARRATIVE RESPONSE (2-4 paragraphs in first person plural):
+Describe their response to the scenario this year, specific decisions, resources committed, partnerships sought, concerns, and relationship changes.
 
-        // Extract structured decisions using AI
-        const decisionsJson = await callAnthropic(
-          `Extract structured data from the response. Return valid JSON only.`,
-          `Extract the following from this response:
-${responseText}
-
-Return JSON with:
+PART 2 - STRUCTURED DATA (valid JSON):
+After your narrative, include a JSON block with this exact structure:
+\`\`\`json
 {
   "decision_summary": "One sentence summary of main decision",
   "actions": ["list of specific actions"],
@@ -284,14 +304,19 @@ Return JSON with:
   },
   "partners_sought": ["names of organizations they want to partner with"],
   "relationship_changes": [
-    {"entity_name": "name", "change_type": "strengthened" | "weakened" | "new" | "broken", "reason": "why"}
+    {"entity_name": "name", "change_type": "strengthened | weakened | new | broken", "reason": "why"}
   ],
-  "sentiment": "supportive" | "neutral" | "opposed" | "cautious",
-  "engagement_level": "high" | "medium" | "low",
+  "sentiment": "supportive | neutral | opposed | cautious",
+  "engagement_level": "high | medium | low",
   "position_statement": "One sentence stating their current position on the scenario"
-}`
+}
+\`\`\`
+
+Start with "NARRATIVE:" then your response, then "STRUCTURED:" followed by the JSON.`
         )
 
+        // Parse the combined response
+        let responseText = combinedResponse
         let decisions = {
           decision_summary: "",
           actions: [] as string[],
@@ -304,12 +329,22 @@ Return JSON with:
         }
 
         try {
-          const jsonMatch = decisionsJson.match(/\{[\s\S]*\}/)
+          // Extract narrative part
+          const narrativeMatch = combinedResponse.match(/NARRATIVE:\s*([\s\S]*?)(?=STRUCTURED:|```json|$)/i)
+          if (narrativeMatch) {
+            responseText = narrativeMatch[1].trim()
+          }
+          
+          // Extract JSON part
+          const jsonMatch = combinedResponse.match(/```json\s*([\s\S]*?)\s*```|\{[\s\S]*"decision_summary"[\s\S]*\}/)
           if (jsonMatch) {
-            decisions = JSON.parse(jsonMatch[0])
+            const jsonStr = jsonMatch[1] || jsonMatch[0]
+            const cleanJson = jsonStr.replace(/```json|```/g, '').trim()
+            decisions = JSON.parse(cleanJson.match(/\{[\s\S]*\}/)?.[0] || '{}')
           }
         } catch {
           // Use defaults if parsing fails
+          console.log(`[v0] Failed to parse response for ${entity.name}, using defaults`)
         }
 
         // Store response (upsert to handle re-runs)
@@ -409,8 +444,8 @@ Return JSON with:
           }
         }
 
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // Small delay to avoid rate limiting (reduced since we now use single API call per entity)
+        await new Promise(resolve => setTimeout(resolve, 200))
 
       } catch (error: any) {
         errors.push({ entity: entity.name, error: error.message })
