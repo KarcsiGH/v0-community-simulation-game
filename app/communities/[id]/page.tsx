@@ -28,7 +28,6 @@ import type { Community, Candidate, Entity } from "@/lib/entity-types"
 import { BatchEntityPopulator } from "@/components/batch-entity-populator"
 import { NetworkAnalysisPanel } from "@/components/network/network-analysis-panel"
 import { NetworkHealthDashboard } from "@/components/network/network-health-dashboard"
-import { NetworkPredictionsPanel } from "@/components/simulation/network-predictions-panel"
 import { DeepDiscoveryPanel } from "@/components/community/deep-discovery-panel"
 
 const stakeholderRoleConfig: Record<string, { label: string; color: string }> = {
@@ -495,7 +494,7 @@ export default function CommunityDetailPage() {
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               <Badge variant="outline" className="text-xs">
-                                {entityTypeLabels[link.entities?.type] || "Unknown"}
+                                {(link.entities?.type && entityTypeLabels[link.entities.type]) || "Unknown"}
                               </Badge>
                               {link.role && stakeholderRoleConfig[link.role] && (
                                 <Badge className={`text-xs ${stakeholderRoleConfig[link.role].color}`}>
@@ -522,10 +521,9 @@ export default function CommunityDetailPage() {
 
         <TabsContent value="network" className="space-y-6">
           <Tabs defaultValue="analysis" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="analysis">Network Graph</TabsTrigger>
               <TabsTrigger value="health">Health Dashboard</TabsTrigger>
-              <TabsTrigger value="predictions">Predictions</TabsTrigger>
             </TabsList>
             
             <TabsContent value="analysis">
@@ -534,10 +532,6 @@ export default function CommunityDetailPage() {
             
             <TabsContent value="health">
               <NetworkHealthDashboard communityId={id} />
-            </TabsContent>
-            
-            <TabsContent value="predictions">
-              <NetworkPredictionsPanel communityId={id} />
             </TabsContent>
           </Tabs>
         </TabsContent>
